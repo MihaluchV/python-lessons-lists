@@ -493,13 +493,95 @@ sc('Задача 5. Знижка 20%',[
 ]);
 LS[5]={S,titles,starts};
 
-function speak(t){sub.textContent=t;return new Promise(res=>{
+/* function speak(t){sub.textContent=t;return new Promise(res=>{
  if(muted||!('speechSynthesis' in window))return setTimeout(res,Math.max(2500,t.length*70));
  const u=new SpeechSynthesisUtterance(t),t0=Date.now(),est=Math.max(2000,t.length*70);
  u.lang='uk-UA';u.rate=.92;if(voice)u.voice=voice;
  const fin=()=>{const el=Date.now()-t0;setTimeout(res,el<500?est-el:0)};
- u.onend=fin;u.onerror=fin;speechSynthesis.speak(u)})}
-const TWO=/\b(ins|del|move|reorder|dim)\(|\bat\([^)]|\bhi\(\[[^\]]/;
+ u.onend=fin;u.onerror=fin;speechSynthesis.speak(u)})} */
+
+ function speak(t) {
+    // Візуальні субтитри залишаються повністю незмінними (з латиницею)
+    sub.textContent = t; 
+
+    return new Promise(res => {
+        if (muted || !('speechSynthesis' in window)) {
+            return setTimeout(res, Math.max(2500, t.length * 70));
+        }
+
+        window.speechSynthesis.cancel(); // Зупиняємо попереднє відтворення
+
+        // Розбиваємо текст на токени (слова, латиниця, кирилиця, знаки)
+        const tokens = t.match(/([a-zA-Z0-9.-]+|[а-яА-ЯіІїЇєЄґҐ'-]+|[^\s\w]+|\s+)/g);
+        if (!tokens) {
+            return setTimeout(res, 500);
+        }
+
+        const voices = window.speechSynthesis.getVoices();
+        const ukVoice = voice || voices.find(v => v.lang.startsWith('uk'));
+        const enVoice = voices.find(v => v.lang.startsWith('en-US')) || voices.find(v => v.lang.startsWith('en'));
+
+        // Групуємо токени у фрагменти за мовою
+        let chunks = [];
+        let currentLang = 'uk';
+        let currentChunk = '';
+
+        tokens.forEach(token => {
+            let tokenLang = 'uk';
+            if (/[a-zA-Z]/.test(token)) {
+                tokenLang = 'en';
+            } else if (!/[а-яА-ЯіІїЇєЄґҐ]/.test(token)) {
+                tokenLang = currentLang; // Знаки пунктуації та пробіли успадковують мову контексту
+            }
+
+            if (tokenLang !== currentLang && token.trim() !== '') {
+                if (currentChunk.trim()) {
+                    chunks.push({ text: currentChunk, lang: currentLang });
+                }
+                currentChunk = '';
+                currentLang = tokenLang;
+            }
+            currentChunk += token;
+        });
+
+        if (currentChunk.trim()) {
+            chunks.push({ text: currentChunk, lang: currentLang });
+        }
+
+        if (chunks.length === 0) {
+            return setTimeout(res, 500);
+        }
+
+        const t0 = Date.now();
+        const est = Math.max(2000, t.length * 70);
+        let index = 0;
+
+        // Послідовне відтворення шматків різними мовами
+        function playNextChunk() {
+            if (index >= chunks.length) {
+                const el = Date.now() - t0;
+                setTimeout(res, el < 500 ? est - el : 0);
+                return;
+            }
+            const chunk = chunks[index++];
+            const u = new SpeechSynthesisUtterance(chunk.text);
+            u.rate = 0.92;
+            if (chunk.lang === 'en') {
+                u.lang = 'en-US';
+                if (enVoice) u.voice = enVoice;
+            } else {
+                u.lang = 'uk-UA';
+                if (ukVoice) u.voice = ukVoice;
+            }
+            u.onend = playNextChunk;
+            u.onerror = playNextChunk;
+            window.speechSynthesis.speak(u);
+        }
+        playNextChunk();
+    });
+}
+
+ const TWO=/\b(ins|del|move|reorder|dim)\(|\bat\([^)]|\bhi\(\[[^\]]/;
 async function play(s,my){
  document.querySelectorAll('#nav button').forEach((b,k)=>b.classList.toggle('on',k===s.si));
  const src=s.a.toString(),m=src.match(/ln\((\d+)\)/);
