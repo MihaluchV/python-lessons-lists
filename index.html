@@ -500,8 +500,8 @@ LS[5]={S,titles,starts};
  const fin=()=>{const el=Date.now()-t0;setTimeout(res,el<500?est-el:0)};
  u.onend=fin;u.onerror=fin;speechSynthesis.speak(u)})} */
 
- function speak(t) {
-    // Візуальні субтитри залишаються повністю незмінними (з латиницею)
+function speak(t) {
+    // Візуальні субтитри залишаються повністю незмінними (без жодних міток наголосу)
     sub.textContent = t; 
 
     return new Promise(res => {
@@ -511,8 +511,22 @@ LS[5]={S,titles,starts};
 
         window.speechSynthesis.cancel(); // Зупиняємо попереднє відтворення
 
-        // Розбиваємо текст на токени (слова, латиниця, кирилиця, знаки)
-        const tokens = t.match(/([a-zA-Z0-9.-]+|[а-яА-ЯіІїЇєЄґҐ'-]+|[^\s\w]+|\s+)/g);
+        // Словник для коригування наголосів спеціально для аудіо-рушія
+        const stressMap = {
+            '\\bсписок\\b': 'спи́сок',
+            '\\bсписку\\b': 'спи́ску',
+            '\\bсписки\\b': 'спи́ски',
+            '\\bвпорядкований\\b': 'впорядкóваний',
+            '\\bвпорядкованого\\b': 'впорядкóваного',
+        };
+
+        let audioText = t;
+        for (const [pattern, replacement] of Object.entries(stressMap)) {
+            audioText = audioText.replace(new RegExp(pattern, 'gi'), replacement);
+        }
+
+        // Розбиваємо на токени аудіо-текст (враховуємо кирилицю, латиницю та символ наголосу \u0301)
+        const tokens = audioText.match(/([a-zA-Z0-9.-]+|[а-яА-ЯіІїЇєЄґҐ'\u0301-]+|[^\s\w]+|\s+)/g);
         if (!tokens) {
             return setTimeout(res, 500);
         }
@@ -530,7 +544,7 @@ LS[5]={S,titles,starts};
             let tokenLang = 'uk';
             if (/[a-zA-Z]/.test(token)) {
                 tokenLang = 'en';
-            } else if (!/[а-яА-ЯіІїЇєЄґҐ]/.test(token)) {
+            } else if (!/[а-яА-ЯіІїЇєЄґҐ\u0301]/.test(token)) {
                 tokenLang = currentLang; // Знаки пунктуації та пробіли успадковують мову контексту
             }
 
